@@ -23,7 +23,8 @@
 #elif defined Jan
 #define Dual
 #define HaveLEDs
-#define IOMCP
+#define HaveLight
+//#define IOMCP
 #define Zimmer "Jan_"
 #else
 #define Dual
@@ -50,13 +51,16 @@
 #include <ESP8266WiFi.h>
 #endif
 #include <Wire.h>
+#ifdef USE_MCP
 #include "Adafruit_MCP23017.h"
+#endif
 #include <PubSubClient.h>
+#include <functional>
 
 #define Name0 Zimmer "rechts"
 #define Name1 Zimmer "links"
 
-#include "timer.h"
+#include <arduino-timer.h>
 
 auto timer0 = timer_create_default();
 Timer<>::Task stop0Timer = 0;
@@ -67,9 +71,9 @@ Timer<>::Task stop1Timer = 0;
 void DebugPrintf(const char *, ...); //Our printf function
 char *convert(int, int);    //Convert integer number into octal, hex, etc.
 
-const char *mqtt_server = "openhab";
+const char *mqtt_server = "192.168.178.34";
 #include "../../../wifiPasswd.h"
-
+#include "debounceButton.h"
 WiFiServer server(80);
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -188,31 +192,29 @@ int LightPin = SSR_P3;
 const int LEDAufPin[2] = {LEDAufPin1, LEDAufPin2};
 const int LEDAbPin[2] = {LEDAbPin1, LEDAbPin2};
 #elif defined Jan
-//SDA/SCL default to pins 4& 5
-Adafruit_MCP23017 mcp;
-const int R_P1 = P_A0;
-const int R_P2 = P_A1;
+const int R_P1 = 18;
+const int R_P2 = 19;
 
-const int SSR_P1 = P_A2;
-const int SSR_P2 = P_A3;
-const int SSR_P3 = P_A4;
-const int SSR_P4 = P_A5;
-const int aussenlicht = SSR_P3;
+const int SSR_P1 = 4;
+const int SSR_P2 = 13;
+const int SSR_P3 = 16;
+const int SSR_P4 = 17;
+const int aussenlicht = SSR_P2;
 
-int bAbPin1 = P_B2;
-int bAufPin1 = P_B3;
-int bAbPin2 = P_B0;
-int bAufPin2 = P_B1;
-int bLightPin = P_B4;
+int bAbPin1 = 14;
+int bAufPin1 = 15;
+int bAbPin2 = 25;
+int bAufPin2 = 26;
+int bLightPin = 23;
 
-int LEDAbPin2 = P_A6;
-int LEDAufPin2 = P_A7;
+int LEDAbPin1 = 32;
+int LEDAufPin1 = 27;
 
-int LEDAbPin1 = P_B6;
-int LEDAufPin1 = P_B7;
+int LEDAbPin2 = 22;
+int LEDAufPin2 = 21;
 
-int LEDLightPin = P_B5;
-int LightPin = SSR_P3;
+int LEDLightPin = 33;
+int LightPin = SSR_P2;
 
 const int LEDAufPin[2] = {LEDAufPin1, LEDAufPin2};
 const int LEDAbPin[2] = {LEDAbPin1, LEDAbPin2};
@@ -263,69 +265,11 @@ const int aufAbPin[1] = {R_P1};
  #endif
 #endif
 
-int lightState = LOW;     // the current state of the output pin
+int lightState = HIGH;     // the current state of the output pin
 int buttonState;          // the current reading from the input pin
 int previousState = HIGH; // the previous reading from the input pin
 
 unsigned long pressTime = 0;  // the last time the output pin was toggled
-unsigned long debounce = 100; // the debounce time, increase if the output flickers
-
-class debounceButton
-{
-public:
-  debounceButton(int port);
-  bool wasPressed();
-  static void update();
-
-private:
-  int port;
-  bool previousButtonState;
-  unsigned long lastTime;
-  static unsigned long currentTime;
-};
-unsigned long debounceButton::currentTime = 0;
-
-debounceButton::debounceButton(int p)
-{
-  port = p;
-  lastTime=millis();
-  previousButtonState=false;
-}
-
-void debounceButton::update()
-{
-  currentTime = millis();
-}
-
-bool debounceButton::wasPressed()
-{
-  if(port < 0)
-  {
-    return false;
-  }
-  bool buttonState = !mcp.digitalRead(port);
-  if (!buttonState)
-  {
-    lastTime = currentTime;
-    previousButtonState = false;
-  }
-  else{
-    
-    if(port == bAbPin1)
-    DebugPrintf("false\n");
-  }
-
-  if ((buttonState != previousButtonState) )
-  {
-    
-  }
-  if (buttonState && (buttonState != previousButtonState) && (currentTime - lastTime > debounce))
-  {
-    previousButtonState = true;
-    return true;
-  }
-  return false;
-}
 
 debounceButton bAuf1(bAufPin1);
 debounceButton bAuf2(bAufPin2);
@@ -800,8 +744,6 @@ bool stopIt1(void *)
   return true;
 }
 
-const char *command0String = "rollladen/" Name0 "/command";
-const char *command1String = "rollladen/" Name0 "/command";
 void callback(char *topicP, byte *payloadP, unsigned int length)
 {
   char topic[200];
@@ -811,7 +753,7 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
   payload[length] = '\0';
 
   DebugPrintf("Message arrived [%s] %s\n", topic, payload);
-  if (strcmp(topic, command0String) == 0)
+  if (strcmp(topic, "rollladen/" Name0 "/command") == 0)
   {
     if ((char)payload[0] == '0')
     {
@@ -855,6 +797,19 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
       rollladen[1].setPosition(pos);
     }
   }
+  #ifdef Jan
+  if (strcmp(topic, "steckdose/Jan/command") == 0)
+  {
+    if ((char)payload[1] == 'N') // "ON"
+    {
+      lightState = true;
+    }
+    else
+    {
+      lightState = false;
+    }
+  }
+  #endif
   #ifdef Terrasse
   else if (strcmp(topic, "terrasse/licht/command") == 0)
   {
@@ -885,6 +840,16 @@ void sendState()
     client.publish("terrasse/licht/status", "OFF");
   }
   #endif
+  #ifdef Jan
+  if (lightState)
+  {
+    client.publish("steckdose/Jan/state", "ON");
+  }
+  else
+  {
+    client.publish("steckdose/Jan/state", "OFF");
+  }
+  #endif
 }
 
 void reconnect()
@@ -906,6 +871,9 @@ void reconnect()
     // ... and resubscribe
     client.subscribe("rollladen/" Name0 "/command");
     client.subscribe("rollladen/" Name1 "/command");
+    #ifdef Jan
+    client.subscribe("steckdose/Jan/command");
+    #endif
     #ifdef Terrasse
     client.subscribe("terrasse/licht/command");
     #endif
@@ -921,9 +889,11 @@ void setup()
 {
   //pinMode(D5,OUTPUT);
   //digitalWrite(D5,HIGH);
+  lightState=false;
   Serial.begin(115200);
   DebugPrintf("\n");
 
+debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 #ifdef IOMCP
   mcp.begin(); // use default address 0
 #endif
@@ -953,7 +923,6 @@ void setup()
     mcp.pinMode(LightPin, OUTPUT);
     mcp.pullUp(bLightPin, HIGH); // turn on a 100K pullup internally
   }
-  bool ledState = true;
 
 #ifdef HaveLEDs
   mcp.pinMode(LEDAufPin1, OUTPUT);
@@ -965,6 +934,7 @@ void setup()
   mcp.pinMode(LEDAbPin2, OUTPUT);
 #endif
 #ifdef HaveLight
+  bool ledState = true;
   mcp.pinMode(LEDLightPin, OUTPUT);
   mcp.digitalWrite(LEDLightPin, ledState);
 #endif
@@ -981,18 +951,27 @@ void setup()
   mcp.digitalWrite(SSR_P2, true);
 #endif
 
-  DebugPrintf("sRollladen 2 connecting to wifi\n");
+  DebugPrintf("connecting to wifi\n");
 
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  int timeoutCount = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
+    int blState=false;
+    blState = !blState;
 #ifdef HaveLight
-    ledState = !ledState;
-    mcp.digitalWrite(LEDLightPin, ledState);
+    mcp.digitalWrite(LEDLightPin, blState);
+#else
+    mcp.digitalWrite(LEDAufPin1, blState);
 #endif
+     timeoutCount++;
+     if(timeoutCount > 60) // reset after 30 Seconds
+     {
+        ESP.restart();
+     }
   }
 
   ArduinoOTA.setPort(8266);
@@ -1042,11 +1021,28 @@ void setup()
   #ifndef SingleRoller
   rollladen[1].ScheduleStop();
   #endif
+  
+  bAuf1.init(true);
+  bAuf2.init(true);
+  bAb1.init(true);
+  bAb2.init(true);
+  bLight.init(true);
+  
+#ifdef HaveLight
+    mcp.digitalWrite(LEDLightPin, lightState);
+    mcp.digitalWrite(LightPin, !lightState);
+#else
+  mcp.digitalWrite(LEDAufPin1, false);
+#endif
 }
 
 void reconnectWifi()
 {
-  bool ledState = false;
+  
+  Serial.println("Reconnecting to WiFi...");
+  WiFi.disconnect();
+  WiFi.reconnect();
+  int timeoutCount=0;
   while (WiFi.status() != WL_CONNECTED)
   {
     long start = millis();
@@ -1054,11 +1050,25 @@ void reconnectWifi()
     {
       localLoop();
     }
-    ledState = !ledState;
+    int blState=false;
+    blState = !blState;
 #ifdef HaveLight
-    mcp.digitalWrite(LEDLightPin, ledState);
+    mcp.digitalWrite(LEDLightPin, blState);
+#else
+    mcp.digitalWrite(LEDAufPin1, blState);
 #endif
+     timeoutCount++;
+     if(timeoutCount > 480) // reset after four minutes
+     {
+        ESP.restart();
+     }
   }
+  
+#ifdef HaveLight
+    mcp.digitalWrite(LEDLightPin, lightState);
+#else
+  mcp.digitalWrite(LEDAufPin1, false);
+#endif
 }
 long lastReconnectAttempt = 0;
 long lastReconnectWifiAttempt = 0;
@@ -1176,4 +1186,9 @@ void localLoop()
   rollladen[0].update();
   timer0.tick();
   rollladen[1].update();
+  
+  if(bLight.wasDoubleKlicked()||bAuf1.wasDoubleKlicked()||bAuf2.wasDoubleKlicked())
+  {
+    ESP.restart();
+  }
 }
