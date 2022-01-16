@@ -18,7 +18,6 @@
 #elif defined Bad
 #define Dual
 #define HaveLEDs
-#define IOMCP
 #define Zimmer "Bad_"
 #elif defined Jan
 #define Dual
@@ -30,7 +29,6 @@
 #define Dual
 #define HaveLight
 #define HaveLEDs
-#define IOMCP
 #define Zimmer "Wohnzimmer_"
 #define Terrasse
 #endif
@@ -158,35 +156,33 @@ int bAufPin1 = 18;
 int bAbPin2 = -1; //D8;
 int bAufPin2 = -1;//D9;
 
-const int LEDAbPin1 = 16;
-const int LEDAufPin1 = 17;
+const int LEDAbPin1 = 17;
+const int LEDAufPin1 = 16;
 const int LEDAufPin[1] = {LEDAufPin1};
 const int LEDAbPin[1] = {LEDAbPin1};
 #elif defined Bad
 //SDA/SCL default to pins 4& 5
-Adafruit_MCP23017 mcp;
-const int R_P1 = P_A0;
-const int R_P2 = P_A1;
+const int R_P1 = 18;
+const int R_P2 = 19;
 
-const int SSR_P1 = P_A2;
-const int SSR_P2 = P_A3;
-const int SSR_P3 = P_A4;
-const int SSR_P4 = P_A5;
-const int aussenlicht = SSR_P3;
+const int SSR_P1 = 4;
+const int SSR_P2 = 13;
+const int SSR_P3 = 16;
+const int SSR_P4 = 17;
 
-int bAbPin1 = P_B2;
-int bAufPin1 = P_B3;
-int bAbPin2 = P_B0;
-int bAufPin2 = P_B1;
-int bLightPin = P_B4;
+int bAbPin1 = -1;
+int bAufPin1 = -1;
+int bAbPin2 = -1;
+int bAufPin2 = -1;
+int bLightPin = -1;
 
-int LEDAbPin2 = P_A6;
-int LEDAufPin2 = P_A7;
+int LEDAbPin2 = -1;
+int LEDAufPin2 = -1;
 
-int LEDAbPin1 = P_B6;
-int LEDAufPin1 = P_B7;
+int LEDAbPin1 = -1;
+int LEDAufPin1 = -1;
 
-int LEDLightPin = P_B5;
+int LEDLightPin = -1;
 int LightPin = SSR_P3;
 
 const int LEDAufPin[2] = {LEDAufPin1, LEDAufPin2};
@@ -201,20 +197,48 @@ const int SSR_P3 = 16;
 const int SSR_P4 = 17;
 const int aussenlicht = SSR_P2;
 
-int bAbPin1 = 14;
+int bAbPin1 = 14;  // rechts
 int bAufPin1 = 15;
-int bAbPin2 = 25;
+int bAbPin2 = 25;  //links
 int bAufPin2 = 26;
 int bLightPin = 23;
 
-int LEDAbPin1 = 32;
-int LEDAufPin1 = 27;
+int LEDAbPin1 = 27; // rechts
+int LEDAufPin1 = 32;
 
-int LEDAbPin2 = 22;
-int LEDAufPin2 = 21;
+int LEDAbPin2 = 21; //links
+int LEDAufPin2 = 22;
 
 int LEDLightPin = 33;
 int LightPin = SSR_P2;
+
+const int LEDAufPin[2] = {LEDAufPin1, LEDAufPin2};
+const int LEDAbPin[2] = {LEDAbPin1, LEDAbPin2};
+#elif defined Wohnzimmer
+const int R_P1 = 18;
+const int R_P2 = 19;
+
+const int SSR_P1 = 4;
+const int SSR_P2 = 13;
+const int SSR_P3 = 16;
+const int SSR_P4 = 17;
+const int aussenlicht = SSR_P3;
+
+int bAbPin1 = 14;
+int bAufPin1 = 15;
+int bAbPin2 = 35; // 25 scheint defekt
+int bAufPin2 = 26;
+int bLightPin = 23;
+
+int LEDAbPin1 = 21;
+int LEDAufPin1 = 22;
+
+int LEDAbPin2 = 32;
+int LEDAufPin2 = 27;
+
+
+int LEDLightPin = 33;
+int LightPin = SSR_P3;
 
 const int LEDAufPin[2] = {LEDAufPin1, LEDAufPin2};
 const int LEDAbPin[2] = {LEDAbPin1, LEDAbPin2};
@@ -236,11 +260,11 @@ int bAbPin2 = P_B0;
 int bAufPin2 = P_B1;
 int bLightPin = P_B4;
 
-int LEDAbPin2 = P_A6;
-int LEDAufPin2 = P_A7;
+int LEDAbPin2 = P_A7;
+int LEDAufPin2 = P_A6;
 
-int LEDAbPin1 = P_B6;
-int LEDAufPin1 = P_B7;
+int LEDAbPin1 = P_B7;
+int LEDAufPin1 = P_B6;
 
 int LEDLightPin = P_B5;
 int LightPin = SSR_P3;
@@ -608,7 +632,10 @@ void Rollladen::Ab()
     if (auf == true)
     {
       mcp.digitalWrite(runPin[id], HIGH);
-      DebugPrintf("AufLow\n");
+      DebugPrintf("AufAus\n");
+#ifdef HaveLEDs
+      mcp.digitalWrite(LEDAufPin[id], LOW);
+#endif
       delay(SSRDelay);
       auf = false;
     }
@@ -628,10 +655,10 @@ void Rollladen::Ab()
       delay(RELAISDELAY);
       mcp.digitalWrite(runPin[id], LOW);
 #ifdef HaveLEDs
-      mcp.digitalWrite(LEDAufPin[id], HIGH);
+      mcp.digitalWrite(LEDAbPin[id], HIGH);
 #endif
 
-      DebugPrintf("AbHigh\n");
+      DebugPrintf("AbAn\n");
       ab = true;
     }
 #ifdef ESP32
@@ -655,7 +682,10 @@ void Rollladen::Auf()
     if (ab == true)
     {
       mcp.digitalWrite(runPin[id], HIGH);
-      //DebugPrintf("AbLow\n");
+      //DebugPrintf("AbAus\n");
+#ifdef HaveLEDs
+      mcp.digitalWrite(LEDAbPin[id], LOW);
+#endif
       delay(SSRDelay);
       ab = false;
     }
@@ -675,9 +705,9 @@ void Rollladen::Auf()
       delay(RELAISDELAY);
       mcp.digitalWrite(runPin[id], LOW);
 #ifdef HaveLEDs
-      mcp.digitalWrite(LEDAbPin[id], HIGH);
+      mcp.digitalWrite(LEDAufPin[id], HIGH);
 #endif
-      DebugPrintf("AufHigh\n");
+      DebugPrintf("AufAn\n");
       auf = true;
     }
 #ifdef ESP32
@@ -861,6 +891,7 @@ void reconnect()
   DebugPrintf("Attempting MQTT connection...\n");
 #ifdef ESP32
   esp_task_wdt_init(25, true); //socket timeout is 15seconds
+#else
 #endif
   // Attempt to connect
   if (client.connect("cl1" Zimmer))
@@ -884,6 +915,7 @@ void reconnect()
     DebugPrintf("%d", client.state());
     DebugPrintf(" try again in 5 seconds\n");
   }
+  
 }
 void setup()
 {
@@ -940,15 +972,26 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 #endif
 #endif
 #ifdef Bad
-  mcp.pinMode(SSR_P3, OUTPUT);
-  mcp.digitalWrite(SSR_P3, true);
   mcp.pinMode(SSR_P2, OUTPUT);
   mcp.digitalWrite(SSR_P2, true);
+  mcp.pinMode(SSR_P3, OUTPUT);
+  mcp.digitalWrite(SSR_P3, true);
+  mcp.pinMode(SSR_P4, OUTPUT);
+  mcp.digitalWrite(SSR_P4, true);
+  mcp.pinMode(SSR_P1, OUTPUT);
+  mcp.digitalWrite(SSR_P1, true);
 #elif defined Jan
   mcp.pinMode(SSR_P3, OUTPUT);
   mcp.digitalWrite(SSR_P3, true);
   mcp.pinMode(SSR_P2, OUTPUT);
   mcp.digitalWrite(SSR_P2, true);
+#elif defined Wohnzimmer
+  mcp.pinMode(SSR_P1, OUTPUT);
+  mcp.digitalWrite(SSR_P1, true);
+  mcp.pinMode(SSR_P2, OUTPUT);
+  mcp.digitalWrite(SSR_P2, true);
+  mcp.pinMode(SSR_P3, OUTPUT);
+  mcp.digitalWrite(SSR_P3, true);
 #endif
 
   DebugPrintf("connecting to wifi\n");
@@ -957,10 +1000,10 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   int timeoutCount = 0;
+  int blState=false;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
-    int blState=false;
     blState = !blState;
 #ifdef HaveLight
     mcp.digitalWrite(LEDLightPin, blState);
@@ -981,6 +1024,8 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
   ArduinoOTA.setHostname("RollladenBad");
 #elif defined Jan
   ArduinoOTA.setHostname("RollladenJan");
+#elif defined Wohnzimmer
+  ArduinoOTA.setHostname("RollladenWohnzimmer");
 #else
   ArduinoOTA.setHostname("Rollladen8266");
 #endif
@@ -993,6 +1038,20 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     DebugPrintf("Progress: %u %% \r", (progress / (total / 100)));
+    
+    static int oldp = 0;
+    float per = progress / (total / 100.0);
+    static bool blState=false;
+    if(oldp!=(int)per)
+    {
+      oldp = (int)per;
+    blState = !blState;
+#ifdef HaveLight
+    mcp.digitalWrite(LEDLightPin, blState);
+#else
+    mcp.digitalWrite(LEDAufPin1, blState);
+#endif
+    }
   });
 
   ArduinoOTA.onError([](ota_error_t error) {
@@ -1022,11 +1081,20 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
   rollladen[1].ScheduleStop();
   #endif
   
+  #ifdef IOMCP
+  bAuf1.initMCP();
+  bAuf2.initMCP();
+  bAb1.initMCP();
+  bAb2.initMCP();
+  bLight.initMCP();
+
+  #else
   bAuf1.init(true);
   bAuf2.init(true);
   bAb1.init(true);
   bAb2.init(true);
   bLight.init(true);
+  #endif
   
 #ifdef HaveLight
     mcp.digitalWrite(LEDLightPin, lightState);
@@ -1034,6 +1102,8 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 #else
   mcp.digitalWrite(LEDAufPin1, false);
 #endif
+
+  DebugPrintf("T3\n");
 }
 
 void reconnectWifi()
@@ -1043,6 +1113,7 @@ void reconnectWifi()
   WiFi.disconnect();
   WiFi.reconnect();
   int timeoutCount=0;
+  int blState=false;
   while (WiFi.status() != WL_CONNECTED)
   {
     long start = millis();
@@ -1050,7 +1121,6 @@ void reconnectWifi()
     {
       localLoop();
     }
-    int blState=false;
     blState = !blState;
 #ifdef HaveLight
     mcp.digitalWrite(LEDLightPin, blState);
@@ -1110,7 +1180,7 @@ void loop()
 void localLoop()
 {
   ArduinoOTA.handle();
-  if(bLight.wasPressed())
+  if(bLight.wasPressed()||bLight.wasKlicked())
   {
     lightState = !lightState;
   }
@@ -1128,7 +1198,7 @@ void localLoop()
     sendState();
   }
 
-  if (bAuf1.wasPressed())
+  if (bAuf1.wasKlicked()||bAuf1.wasPressed())
   {
     if (rollladen[0].isRunning())
     {
@@ -1141,7 +1211,7 @@ void localLoop()
       rollladen[0].ScheduleAuf();
     }
   }
-  if (bAb1.wasPressed())
+  if (bAb1.wasKlicked()||bAb1.wasPressed())
   {
     if (rollladen[0].isRunning())
     {
@@ -1155,7 +1225,7 @@ void localLoop()
     }
   }
   rollladen[0].update();
-  if (bAuf2.wasPressed())
+  if (bAuf2.wasKlicked()||bAuf2.wasPressed())
   {
     
       DebugPrintf("%d\n",bAufPin2);
@@ -1170,7 +1240,7 @@ void localLoop()
       rollladen[1].ScheduleAuf();
     }
   }
-  if (bAb2.wasPressed())
+  if (bAb2.wasKlicked()||bAb2.wasPressed())
   {
     if (rollladen[1].isRunning())
     {
