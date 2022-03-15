@@ -15,10 +15,12 @@
 #define HaveLEDs
 #define IOMCP
 #define Zimmer "Schlafzimmer_"
+
 #elif defined Bad
 #define Dual
 #define HaveLEDs
 #define Zimmer "Bad_"
+#define HaveTemp
 #elif defined Jan
 #define Dual
 #define HaveLEDs
@@ -31,6 +33,13 @@
 #define HaveLEDs
 #define Zimmer "Wohnzimmer_"
 #define Terrasse
+#endif
+#ifdef HaveTemp
+#include "DHTesp.h" 
+DHTesp dht;
+float istTemperatur = 22.0;
+float sollTemperatur = 22.0;
+float istHumidity;
 #endif
 
 // select board: NodeMCU 1.0 (ESP-12E Module)
@@ -783,7 +792,39 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
   payload[length] = '\0';
 
   DebugPrintf("Message arrived [%s] %s\n", topic, payload);
-  if (strcmp(topic, "rollladen/" Name0 "/command") == 0)
+  if(strcmp(topic,"bad/Thermostat/Auf")==0)
+  {
+    if (((char)payload[0] == 'O') &&((char)payload[1] == 'N')) // "ON"
+    {
+      if (rollladen[0].isRunning())
+      {
+        DebugPrintf("MQTTBStop\n");
+        rollladen[0].ScheduleStop();
+      }
+      else
+      {
+        DebugPrintf("MQTTBstartAuf\n");
+        rollladen[0].ScheduleAuf();
+      }
+    }
+  }
+  else if(strcmp(topic,"bad/Thermostat/Ab")==0)
+  {
+    if (((char)payload[0] == 'O') &&((char)payload[1] == 'N')) // "ON"
+    {
+      if (rollladen[0].isRunning())
+      {
+        DebugPrintf("MQTTBStop\n");
+        rollladen[0].ScheduleStop();
+      }
+      else
+      {
+        DebugPrintf("MQTTBstartAuf\n");
+        rollladen[0].ScheduleAb();
+      }
+    }
+  }
+  else if (strcmp(topic, "rollladen/" Name0 "/command") == 0)
   {
     if ((char)payload[0] == '0')
     {
@@ -805,7 +846,7 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
       rollladen[0].setPosition(pos);
     }
   }
-  if (strcmp(topic, "rollladen/" Name1 "/command") == 0)
+  else if (strcmp(topic, "rollladen/" Name1 "/command") == 0)
   {
 
     if ((char)payload[0] == '0')
@@ -828,7 +869,7 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
     }
   }
   #ifdef Jan
-  if (strcmp(topic, "steckdose/Jan/command") == 0)
+  else if (strcmp(topic, "steckdose/Jan/command") == 0)
   {
     if ((char)payload[1] == 'N') // "ON"
     {
@@ -854,12 +895,20 @@ void callback(char *topicP, byte *payloadP, unsigned int length)
     }
   }
   #endif
-
+  topic[0]='\0';
+  payload[0]='\0';
   sendState();
 }
 
 void sendState()
 {
+  #ifdef HaveTemp
+  char buf[50];
+  sprintf(buf, "%3.1f", istTemperatur);
+  client.publish(Zimmer"/Thermostat/ist", buf);
+  sprintf(buf, "%3.1f", istHumidity);
+  client.publish(Zimmer"/Thermostat/humidity", buf);
+  #endif
   #ifdef Terrasse
   if (lightState)
   {
@@ -902,6 +951,10 @@ void reconnect()
     // ... and resubscribe
     client.subscribe("rollladen/" Name0 "/command");
     client.subscribe("rollladen/" Name1 "/command");
+    #ifdef Bad
+    client.subscribe("bad/Thermostat/Auf");
+    client.subscribe("bad/Thermostat/Ab");
+    #endif
     #ifdef Jan
     client.subscribe("steckdose/Jan/command");
     #endif
@@ -924,6 +977,10 @@ void setup()
   lightState=false;
   Serial.begin(115200);
   DebugPrintf("\n");
+  
+#ifdef HaveTemp  
+  dht.setup(5, DHTesp::DHT22); // Connect DHT sensor to GPIO 5
+#endif
 
 debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 #ifdef IOMCP
@@ -1038,6 +1095,7 @@ debounceButton::readFunction  = [](int port) { return mcp.digitalRead(port); };
 
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     DebugPrintf("Progress: %u %% \r", (progress / (total / 100)));
+  esp_task_wdt_reset(); // reset the watchdog
     
     static int oldp = 0;
     float per = progress / (total / 100.0);
@@ -1143,6 +1201,10 @@ void reconnectWifi()
 long lastReconnectAttempt = 0;
 long lastReconnectWifiAttempt = 0;
 
+#ifdef HaveTemp
+static float itOld = 0;
+static float ihOld = 0;
+#endif
 
 void loop()
 {
@@ -1179,11 +1241,31 @@ void loop()
 
 void localLoop()
 {
+  
+  unsigned long now = millis();
+  static unsigned long oldTemperatureTime = 0;
   ArduinoOTA.handle();
   if(bLight.wasPressed()||bLight.wasKlicked())
   {
     lightState = !lightState;
   }
+  #ifdef HaveTemp
+
+  if (now - oldTemperatureTime > 2000)
+  {
+    oldTemperatureTime = now;
+
+    istHumidity = dht.getHumidity();
+    istTemperatur = dht.getTemperature();
+  }
+  
+  if(itOld!=istTemperatur || ihOld< istHumidity-0.1 ||ihOld> istHumidity+0.1)
+  {
+      itOld = istTemperatur;
+      ihOld = istHumidity;
+      sendState();
+  }
+  #endif
  
   static bool os = false;
 
