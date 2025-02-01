@@ -50,7 +50,7 @@ float istHumidity;
 #include <ArduinoOTA.h>
 //#include <WebServer.h>
 #ifdef ESP32
-#include <esp_int_wdt.h>
+//#include <esp_int_wdt.h>
 #include <esp_task_wdt.h>
 
 #include <WiFi.h>
@@ -939,7 +939,11 @@ void reconnect()
 
   DebugPrintf("Attempting MQTT connection...\n");
 #ifdef ESP32
-  esp_task_wdt_init(25, true); //socket timeout is 15seconds
+esp_task_wdt_config_t config;
+config.timeout_ms = 25;
+config.idle_core_mask = ~0;
+config.trigger_panic = true;
+  esp_task_wdt_init(&config); //socket timeout is 15seconds
 #else
 #endif
   // Attempt to connect
